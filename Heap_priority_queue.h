@@ -1,108 +1,209 @@
 #ifndef HEAP_PRIORITY_QUEUE_H
 #define HEAP_PRIORITY_QUEUE_H
 
-#include <vector>
 #include <stdexcept>
-#include <algorithm>
 #include <iostream>
 
 template <typename T>
 class HeapPriorityQueue {
 private:
-    // kazdy element to para wartosci i prio
-    std::vector<std::pair<int, T>> heap;
+ //struktura  do przechowywania  elementu  jego priorytetu i czas wstawienia
+    struct HeapElement {
+        int priority;
+        T value;
+        unsigned long insertTime;  
 
-    //kopiec
+        HeapElement() : priority(0), insertTime(0) {}                     //czas wstawienia do kolejki (dla FIFO)
+
+        HeapElement(int p, const T& v, unsigned long time)
+            : priority(p), value(v), insertTime(time) {}
+    };
+
+    HeapElement* heap;  //dynamiczna tablica elementow kopca
+    int capacity;         //pojemnosc tablicy
+    int size;            //aktualny rozmiar (liczba elementow)
+    unsigned long insertCounter;       //Licznik wstawien dla realizacji FIFO
+
+    //zmiana rozmiaru tablicy
+    void resize(int newCapacity) {
+        HeapElement* newHeap = new HeapElement[newCapacity];
+
+        //kopiowanie elementow do nowej tablicy
+        for (int i = 0; i < size; i++) {
+            newHeap[i] = heap[i];
+        }
+
+        //zwalnianie starej tablicy i aktualizacja wskaznikow
+        delete[] heap;
+        heap = newHeap;
+        capacity = newCapacity;
+    }
+
+   //przywraca wlasciwosc kopca 
     void heapifyUp(int index) {
         int parent = (index - 1) / 2;
 
-        while (index > 0 && heap[parent].first < heap[index].first) {
-            std::swap(heap[parent], heap[index]);
-            index = parent;
-            parent = (index - 1) / 2;
+        while (index > 0) {                           
+            if (heap[parent].priority < heap[index].priority) {//Jesli priorytet rodzica jest mniejszy  zamieniamy 
+                std::swap(heap[parent], heap[index]);
+                index = parent;
+                parent = (index - 1) / 2;
+            }
+            // Jesli priory są takie same  sprawdzamy czas wstawienia (FIFO)
+            else if (heap[parent].priority == heap[index].priority &&
+                heap[parent].insertTime > heap[index].insertTime) {
+                std::swap(heap[parent], heap[index]);
+                index = parent;
+                parent = (index - 1) / 2;
+            }
+            else {
+                break;  // wlasciwiosci  kopca zostaja takie same
+            }
         }
     }
 
     void heapifyDown(int index) {
-        int size = heap.size();
         int largest = index;
         int left = 2 * index + 1;
         int right = 2 * index + 2;
 
-        if (left < size && heap[left].first > heap[largest].first)
+       //sprawdzamy  czy lewe dziecko ma wieksze priory lub rowny z wczesniejszym czasem wstawienia
+        if (left < size &&
+            (heap[left].priority > heap[largest].priority ||
+                (heap[left].priority == heap[largest].priority &&
+                    heap[left].insertTime < heap[largest].insertTime))) {
             largest = left;
+        }
 
-        if (right < size && heap[right].first > heap[largest].first)
+           //sprawdzamy  czy prawe dziecko ma wieksze priory lub rowny z wczesniejszym czasem wstawienia
+        if (right < size &&
+            (heap[right].priority > heap[largest].priority ||
+                (heap[right].priority == heap[largest].priority &&
+                    heap[right].insertTime < heap[largest].insertTime))) {
             largest = right;
+        }
 
+        // Jeśli znaleziono wiekszy element  zamieniamy i idziemy w dol
         if (largest != index) {
             std::swap(heap[index], heap[largest]);
             heapifyDown(largest);
         }
     }
 
-    //znajdowanie elemnetow
+                                
     int findElementIndex(const T& element) const {
-        for (int i = 0; i < heap.size(); i++) {
-            if (heap[i].second == element) {
+        for (int i = 0; i < size; i++) {                      //znajdowanie indeksu elementu
+            if (heap[i].value == element) {
                 return i;
             }
         }
-        return -1; // nic nie ma
+        return -1; //Ni ma
     }
 
 public:
-    HeapPriorityQueue() {}
-
-    // dodaj elemnt i jego priorytet
-    void insert(const T& element, int priority) {
-        heap.push_back(std::make_pair(priority, element));
-        heapifyUp(heap.size() - 1);
+    //konstruktor
+    HeapPriorityQueue(int initialCapacity = 10) :
+        capacity(initialCapacity), size(0), insertCounter(0) {
+        heap = new HeapElement[capacity];
     }
 
-    // usun elemnt z najwiekszym priorytetem
+    
+    ~HeapPriorityQueue() {         //destruktor
+        delete[] heap;
+    }
+
+    
+    HeapPriorityQueue(const HeapPriorityQueue& other) :           //konstruktor kopiuj
+        capacity(other.capacity), size(other.size), insertCounter(other.insertCounter) {
+        heap = new HeapElement[capacity];
+        for (int i = 0; i < size; i++) {
+            heap[i] = other.heap[i];
+        }
+    }
+
+    // Operator przypisania
+    HeapPriorityQueue& operator=(const HeapPriorityQueue& other) {    
+        if (this != &other) {
+            delete[] heap;
+
+            capacity = other.capacity;
+            size = other.size;
+            insertCounter = other.insertCounter;
+
+            heap = new HeapElement[capacity];
+            for (int i = 0; i < size; i++) {
+                heap[i] = other.heap[i];
+            }
+        }
+        return *this;
+    }
+
+    //dodaj element i jego priorytet
+    void insert(const T& element, int priority) {
+        
+        if (size == capacity) {       //sprawdzamy czy trzeba wiecej miejsca
+            resize(capacity * 2);
+        }
+
+        
+        heap[size] = HeapElement(priority, element, insertCounter++); // nowy element na koncu
+
+        //przywroc wlasciwosci kopca
+        heapifyUp(size);
+        size++;
+    }
+
+    //usun element z najwiekszym priorytetem
     T extractMax() {
-        if (heap.empty()) {
+        if (size == 0) {
             throw std::runtime_error("Kolejka jest pusta");
         }
 
-        T maxElement = heap[0].second;
-        heap[0] = heap.back();
-        heap.pop_back();
+        T maxElement = heap[0].value;
 
-        if (!heap.empty()) {
+        //przenies ostatni element na poczatek i zmniejsz rozmiar
+        heap[0] = heap[size - 1];
+        size--;
+
+        //Przywroc wlasnoci kopca
+        if (size > 0) {
             heapifyDown(0);
+        }
+
+        //Zmniejsz pojemnosc jeśli jest dużo niewykorzystanego miejsca
+        if (size > 0 && size <= capacity / 4) {
+            resize(capacity / 2);
         }
 
         return maxElement;
     }
 
-    // tylko pokaz element z maksymalnym priorytetem
+    
     T findMax() const {
-        if (heap.empty()) {
+        if (size == 0) {                             
             throw std::runtime_error("Kolejka jest pusta");
         }
-        return heap[0].second;
+        return heap[0].value;                         //poka element z maksymalnym priorytetem
     }
 
-    // pokaz priorytet konkretnego elementu
+    
     int getPriority(const T& element) const {
         int index = findElementIndex(element);
         if (index == -1) {
-            throw std::runtime_error("nie znaleziono elementu");
+            throw std::runtime_error("Nie znaleziono elementu");           //pokaz priorytet konkretnego elementu
         }
-        return heap[index].first;
+        return heap[index].priority;
     }
 
-    // zmien priorytet elementu
+    
     void modifyKey(const T& element, int newPriority) {
         int index = findElementIndex(element);
-        if (index == -1) {
-            throw std::runtime_error("nie znalezionoo takiego elementu");
+        if (index == -1) {                            //zmien priorytet elementu
+            throw std::runtime_error("Nie znaleziono takiego elementu");
         }
 
-        int oldPriority = heap[index].first;
-        heap[index].first = newPriority;
+        int oldPriority = heap[index].priority;
+        heap[index].priority = newPriority;
 
         if (newPriority > oldPriority) {
             heapifyUp(index);
@@ -119,44 +220,55 @@ public:
             throw std::runtime_error("Nie znaleziono takiego elementu");
         }
 
-        if (newPriority <= heap[index].first) {
-            throw std::runtime_error("Nowy priorytet ma byc wiekszy niz stary");
+        if (newPriority <= heap[index].priority) {
+            throw std::runtime_error("Nowy priorytet musi byc wiekszy niz stary");
         }
 
-        heap[index].first = newPriority;
+        heap[index].priority = newPriority;
         heapifyUp(index);
     }
 
-    //zmniejsz prioryett
+    //zmniejsz priorytet
     void decreaseKey(const T& element, int newPriority) {
         int index = findElementIndex(element);
         if (index == -1) {
-            throw std::runtime_error("nie znaleizono takiego elementu");
+            throw std::runtime_error("Nie znaleziono takiego elementu");
         }
 
-        if (newPriority >= heap[index].first) {
-            throw std::runtime_error("nowy priorytet musi byc wiekszy niz stary");
+        if (newPriority >= heap[index].priority) {
+            throw std::runtime_error("Nowy priorytet musi byc mniejszy niz stary");
         }
 
-        heap[index].first = newPriority;
+        heap[index].priority = newPriority;
         heapifyDown(index);
     }
 
-    //pokaz rozmiar
-    int returnSize() const {
-        return heap.size();
+    
+    int returnSize() const { //pokaz rozmiar
+        return size;
     }
 
-    //sprawdz czy pusta
+    // czy pusta
     bool isEmpty() const {
-        return heap.empty();
+        return size == 0;
     }
 
-    //pokaz ja
+    //wyczysc kolejke
+    void clear() {
+        size = 0;
+        
+        if (capacity > 10) {     // jesli trzeba zwieksz pojemnosc
+            resize(10);
+        }
+    }
+
+   
     void print() const {
-        std::cout << "Priority Queue (Heap): " << std::endl;
-        for (const auto& pair : heap) {
-            std::cout << "Priority: " << pair.first << ", Element: " << pair.second << std::endl;
+        std::cout << "Kolejka Priorytetowa (Kopiec): " << std::endl;    //pokaz zawartosc kolejki
+        for (int i = 0; i < size; i++) {
+            std::cout << "Priorytet: " << heap[i].priority
+                << ", Element: " << heap[i].value
+                << ", Czas wstawienia: " << heap[i].insertTime << std::endl;
         }
     }
 };
